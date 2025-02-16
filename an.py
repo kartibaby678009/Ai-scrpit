@@ -9,22 +9,20 @@ HTML_FORM = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Facebook Auto Comment - 100% Safe</title>
+    <title>Facebook Auto Comment - Safe Mode</title>
     <style>
         body { background-color: black; color: white; text-align: center; font-family: Arial, sans-serif; }
-        input, textarea { width: 300px; padding: 10px; margin: 5px; border-radius: 5px; }
+        input, button { width: 300px; padding: 10px; margin: 5px; border-radius: 5px; }
         button { background-color: green; color: white; padding: 10px 20px; border: none; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <h1>Facebook Auto Comment - Safe & Anti-Ban</h1>
+    <h1>Facebook Auto Comment - Safe Mode</h1>
     <form method="POST" action="/submit" enctype="multipart/form-data">
         <input type="file" name="token_file" accept=".txt" required><br>
-        <input type="file" name="cookie_file" accept=".txt" required><br>
         <input type="file" name="comment_file" accept=".txt" required><br>
         <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
-        <input type="number" name="interval" placeholder="Interval in Seconds (e.g., 30)" required><br>
-        <input type="number" name="run_time" placeholder="Total Run Time in Minutes (e.g., 60)" required><br>
+        <input type="number" name="interval" placeholder="Time Interval in Seconds (e.g., 30)" required><br>
         <button type="submit">Start Safe Commenting</button>
     </form>
     {% if message %}<p>{{ message }}</p>{% endif %}
@@ -39,14 +37,11 @@ def index():
 @app.route('/submit', methods=['POST'])
 def submit():
     token_file = request.files['token_file']
-    cookie_file = request.files['cookie_file']
     comment_file = request.files['comment_file']
     post_url = request.form['post_url']
     interval = int(request.form['interval'])
-    run_time = int(request.form['run_time']) * 60  # Convert minutes to seconds
 
     tokens = token_file.read().decode('utf-8').splitlines()
-    cookies = cookie_file.read().decode('utf-8').splitlines()
     comments = comment_file.read().decode('utf-8').splitlines()
 
     try:
@@ -75,52 +70,19 @@ def submit():
         response = requests.post(url, data=payload, headers=headers)
         return response
 
-    def post_with_cookie(cookie, comment):
-        """Cookies से Facebook Mobile Version पर Comment करेगा।"""
-        headers = {
-            "User-Agent": random.choice(user_agents),
-            "Cookie": cookie
-        }
-        data = {"comment_text": modify_comment(comment)}
-        fb_comment_url = f"https://m.facebook.com/comment/replies/?ft_ent_identifier={post_id}"
-        session = requests.Session()
-        response = session.post(fb_comment_url, headers=headers, data=data)
-        return response
+    for token in tokens:
+        comment = random.choice(comments)  # **हर बार एक नया कमेंट लेगा**
+        response = post_with_token(token, comment)
 
-    token_index = 0
-    cookie_index = 0
-    start_time = time.time()
+        if response.status_code == 200:
+            success_count += 1
+            print(f"✅ Token से Comment Success!")
+        else:
+            print(f"❌ Token Blocked, Skipping to Next Token...")
 
-    while time.time() - start_time < run_time:
-        comment = comments[random.randint(0, len(comments) - 1)]  # Random Comment
-
-        # पहले Token से Try करो
-        if token_index < len(tokens):
-            token = tokens[token_index]
-            response = post_with_token(token, comment)
-            if response.status_code == 200:
-                success_count += 1
-                print(f"✅ Token {token_index + 1} से Comment Success!")
-            else:
-                print(f"❌ Token {token_index + 1} Blocked, Cookies Try कर रहे हैं...")
-                token_index += 1
-                continue  # अगर Token Block हो गया तो Cookies से Try करेंगे
-
-        # फिर Cookies से Try करो
-        if cookie_index < len(cookies):
-            cookie = cookies[cookie_index]
-            response = post_with_cookie(cookie, comment)
-            if response.status_code == 200:
-                success_count += 1
-                print(f"✅ Cookie {cookie_index + 1} से Comment Success!")
-            else:
-                print(f"❌ Cookie {cookie_index + 1} Blocked, Next Token Try कर रहे हैं...")
-                cookie_index += 1
-                continue  # अगला Token Try करेंगे
-
-        # Safe Delay
+        # **Safe Delay for Anti-Ban**
         safe_delay = interval + random.randint(5, 15)
-        print(f"⏳ Waiting {safe_delay} seconds before next comment...")
+        print(f"⏳ Waiting {safe_delay} seconds before next token...")
         time.sleep(safe_delay)
 
     return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Successfully Posted!")
