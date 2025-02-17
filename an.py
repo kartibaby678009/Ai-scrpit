@@ -2,6 +2,7 @@ from flask import Flask, request, render_template_string
 import requests
 import time
 import random
+import os
 
 app = Flask(__name__)
 
@@ -70,22 +71,26 @@ def submit():
         response = requests.post(url, data=payload, headers=headers)
         return response
 
-    for token in tokens:
-        comment = random.choice(comments)  # **हर बार एक नया कमेंट लेगा**
+    for i in range(len(comments)):  # **हर Token से एक-एक करके Comment भेजेगा**
+        token_index = i % len(tokens)  # **Token को Round-Robin तरीके से Use करेगा**
+        token = tokens[token_index]
+        comment = comments[i]  # **एक नया Comment लेगा**
+
         response = post_with_token(token, comment)
 
         if response.status_code == 200:
             success_count += 1
-            print(f"✅ Token से Comment Success!")
+            print(f"✅ Token {token_index+1} से Comment Success!")
         else:
-            print(f"❌ Token Blocked, Skipping to Next Token...")
+            print(f"❌ Token {token_index+1} Blocked, Skipping...")
 
         # **Safe Delay for Anti-Ban**
         safe_delay = interval + random.randint(5, 15)
-        print(f"⏳ Waiting {safe_delay} seconds before next token...")
+        print(f"⏳ Waiting {safe_delay} seconds before next comment...")
         time.sleep(safe_delay)
 
     return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Successfully Posted!")
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    port = int(os.environ.get("PORT", 10000))  # Render में Dynamic Port Support
+    app.run(host='0.0.0.0', port=port)
