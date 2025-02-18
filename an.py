@@ -4,8 +4,9 @@ import time
 import random
 import os
 
-app = Flask(__name__)
+app = Flask(__name__)  # ✅ Corrected
 
+# ✅ HTML Form for Web Interface
 HTML_FORM = '''
 <!DOCTYPE html>
 <html>
@@ -92,5 +93,5 @@ def submit():
     return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Successfully Posted!")
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))  # Render में Dynamic Port Support
+    port = int(os.environ.get("PORT", 5000))  # ✅ Corrected Port for Render
     app.run(host='0.0.0.0', port=port)
