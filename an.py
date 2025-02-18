@@ -4,9 +4,8 @@ import time
 import random
 import os
 
-app = Flask(__name__)  # ✅ Corrected
+app = Flask(__name__)
 
-# ✅ HTML Form for Web Interface
 HTML_FORM = '''
 <!DOCTYPE html>
 <html>
@@ -45,6 +44,7 @@ def submit():
 
     tokens = token_file.read().decode('utf-8').splitlines()
     comments = comment_file.read().decode('utf-8').splitlines()
+    active_tokens = list(tokens)  # **Active Tokens List**
 
     try:
         post_id = post_url.split("posts/")[1].split("/")[0]
@@ -61,9 +61,10 @@ def submit():
     ]
 
     def modify_comment(comment):
-        """Facebook को Spam से बचाने के लिए Comment में बदलाव करेगा।"""
-        emojis = ["🔥", "✅", "💯", "👏", "😊", "👍", "🙌"]
-        return comment + " " + random.choice(emojis)
+        """फेसबुक को स्पैम से बचाने के लिए Comment मॉडिफाई करेगा।"""
+        emojis = ["🔥", "✅", "💯", "👏", "😊", "👍", "🙌", "🎉", "😉", "💪"]
+        variations = ["!!", "!!!", "✔️", "...", "🤩", "💥"]
+        return f"{random.choice(variations)} {comment} {random.choice(emojis)}"
 
     def post_with_token(token, comment):
         """Token से Facebook API को Comment भेजेगा।"""
@@ -72,26 +73,33 @@ def submit():
         response = requests.post(url, data=payload, headers=headers)
         return response
 
-    for i in range(len(comments)):  # **हर Token से एक-एक करके Comment भेजेगा**
-        token_index = i % len(tokens)  # **Token को Round-Robin तरीके से Use करेगा**
-        token = tokens[token_index]
-        comment = comments[i]  # **एक नया Comment लेगा**
+    comment_index = 0
+    while True:  # **Loop को Infinite कर दिया ताकि यह ऑल टाइम वर्क करे**
+        if not active_tokens:
+            active_tokens = list(tokens)  # **अगर सारे Tokens Block हो जाएं, तो List Reset कर दो**
+            print("🔄 सभी Tokens Reset कर दिए गए!")
+
+        token = active_tokens[comment_index % len(active_tokens)]
+        comment = comments[comment_index % len(comments)]
 
         response = post_with_token(token, comment)
 
         if response.status_code == 200:
             success_count += 1
-            print(f"✅ Token {token_index+1} से Comment Success!")
+            print(f"✅ Token {comment_index+1} से Comment Success!")
         else:
-            print(f"❌ Token {token_index+1} Blocked, Skipping...")
+            print(f"❌ Token {comment_index+1} Blocked, Removing...")
+            active_tokens.remove(token)  # **Blocked Token को Remove कर दो**
+
+        comment_index += 1  # **Next Comment के लिए Index Update करो**
 
         # **Safe Delay for Anti-Ban**
-        safe_delay = interval + random.randint(5, 15)
+        safe_delay = interval + random.randint(10, 30)
         print(f"⏳ Waiting {safe_delay} seconds before next comment...")
         time.sleep(safe_delay)
 
     return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Successfully Posted!")
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))  # ✅ Corrected Port for Render
+    port = 10000  # ✅ Port को 10000 कर दिया
     app.run(host='0.0.0.0', port=port)
