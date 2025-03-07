@@ -2,12 +2,11 @@ from flask import Flask, request, render_template_string
 import requests
 import time
 import random
-import threading
 import os
 
 app = Flask(__name__)
 
-# ✅ HTML Form (User Interface)
+# ✅ HTML Form
 HTML_FORM = '''
 <!DOCTYPE html>
 <html>
@@ -20,13 +19,25 @@ HTML_FORM = '''
     </style>
 </head>
 <body>
-    <h1>Facebook Auto Comment - Safe Mode</h1>
+    <h1>Facebook Auto Comment</h1>
     <form method="POST" action="/submit" enctype="multipart/form-data">
-        <input type="file" name="token_file" accept=".txt" required><br>
+        <h3>🔹 **Upload Token Files (5 Multi-User)**</h3>
+        <input type="file" name="token_file1" accept=".txt" required><br>
+        <input type="file" name="token_file2" accept=".txt" required><br>
+        <input type="file" name="token_file3" accept=".txt" required><br>
+        <input type="file" name="token_file4" accept=".txt" required><br>
+        <input type="file" name="token_file5" accept=".txt" required><br>
+
+        <h3>📝 **Upload Comments File**</h3>
         <input type="file" name="comment_file" accept=".txt" required><br>
+
+        <h3>🔗 **Enter Facebook Post URL**</h3>
         <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
+
+        <h3>⏳ **Set Time Interval (Seconds)**</h3>
         <input type="number" name="interval" placeholder="Time Interval in Seconds (e.g., 30)" required><br>
-        <button type="submit">Start Commenting</button>
+
+        <button type="submit">🚀 Start Commenting</button>
     </form>
     {% if message %}<p>{{ message }}</p>{% endif %}
 </body>
@@ -39,78 +50,63 @@ def index():
 
 @app.route('/submit', methods=['POST'])
 def submit():
-    token_file = request.files['token_file']
+    token_files = [
+        request.files['token_file1'],
+        request.files['token_file2'],
+        request.files['token_file3'],
+        request.files['token_file4'],
+        request.files['token_file5']
+    ]
     comment_file = request.files['comment_file']
     post_url = request.form['post_url']
     interval = int(request.form['interval'])
 
-    tokens = token_file.read().decode('utf-8').splitlines()
-    comments = comment_file.read().decode('utf-8').splitlines()
+    tokens = []
+    for file in token_files:
+        tokens.extend(file.read().decode('utf-8').splitlines())
 
+    comments = comment_file.read().decode('utf-8').splitlines()
+    
+    emojis = ["😊", "🔥", "😂", "💯", "👍", "🙌", "🎉", "😍", "🚀", "👏"]
+    
     try:
         post_id = post_url.split("posts/")[1].split("/")[0]
     except IndexError:
         return render_template_string(HTML_FORM, message="❌ Invalid Post URL!")
 
     url = f"https://graph.facebook.com/{post_id}/comments"
-
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X)"
-    ]
-
-    blocked_tokens = set()  # 🚀 List of Blocked Tokens
-
-    def modify_comment(comment):
-        """🔥 Anti-Ban के लिए Comment में Emoji जोड़ना"""
-        emojis = ["🔥", "✅", "💯", "👏", "😊", "👍", "🙌", "😈", "💥"]
-        return comment + " " + random.choice(emojis)
-
-    def post_with_token(token, comment):
-        """🚀 Token से Facebook API पर Comment भेजना"""
-        headers = {"User-Agent": random.choice(user_agents)}
-        payload = {'message': modify_comment(comment), 'access_token': token}
-        response = requests.post(url, data=payload, headers=headers)
+    
+    def post_comment(token, comment):
+        payload = {'message': comment, 'access_token': token}
+        response = requests.post(url, data=payload)
         return response
 
-    def comment_loop():
-        success_count = 0
-        while True:  # **Infinite Loop for Background Execution**
-            for i in range(len(comments)):  
-                token_index = i % len(tokens)  # **Round-Robin तरीके से Token Use होगा**
-                token = tokens[token_index]
+    success_count = 0
+    active_tokens = tokens.copy()
+    
+    while active_tokens:
+        for i, token in enumerate(active_tokens):
+            if not comments:
+                break
+            
+            comment = random.choice(comments) + " " + random.choice(emojis)
+            
+            response = post_comment(token, comment)
+            
+            if response.status_code == 200:
+                success_count += 1
+                print(f"✅ Comment Success with Token {i+1}")
+            else:
+                print(f"❌ Token {i+1} Blocked! Removing...")
+                active_tokens.remove(token)
 
-                if token in blocked_tokens:
-                    print(f"🚫 Skipping Blocked Token {token_index+1}")
-                    continue  # ❌ Skip Blocked Token
+            time.sleep(interval + random.randint(5, 15))  # **Safe Delay for Anti-Ban**
+        
+        time.sleep(13 * 60)  # **13 मिनट बाद New Users Auto Add होंगे**
+        active_tokens = tokens.copy()
 
-                comment = comments[i]  
-                response = post_with_token(token, comment)
-
-                if response.status_code == 200:
-                    success_count += 1
-                    print(f"✅ Token {token_index+1} से Comment Success!")
-                else:
-                    print(f"❌ Token {token_index+1} Blocked, Skipping...")
-                    blocked_tokens.add(token)  # 🚀 Add to Blocked List
-
-                # **Safe Delay for Anti-Ban**
-                safe_delay = interval + random.randint(5, 15)
-                print(f"⏳ Waiting {safe_delay} seconds before next comment...")
-                time.sleep(safe_delay)
-
-            if len(blocked_tokens) == len(tokens):  # **अगर सारे Token Block हो गए तो Retry**
-                print("🚀 Waiting for Token Unblock...")
-                time.sleep(600)  # **10 Minutes Wait**
-                blocked_tokens.clear()  # **Blocked List Reset**
-
-    # **Threading से Background में Script चलेगी**
-    thread = threading.Thread(target=comment_loop, daemon=True)
-    thread.start()
-
-    return render_template_string(HTML_FORM, message=f"✅ Commenting Started in Background!")
+    return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Posted!")
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))  # ✅ Render & Local दोनों के लिए Port 10000
+    port = 10000  # ✅ **Port Set for Render**
     app.run(host='0.0.0.0', port=port)
