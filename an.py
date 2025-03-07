@@ -2,11 +2,9 @@ from flask import Flask, request, render_template_string
 import requests
 import time
 import random
-import os
 
 app = Flask(__name__)
 
-# ✅ HTML Form
 HTML_FORM = '''
 <!DOCTYPE html>
 <html>
@@ -21,14 +19,10 @@ HTML_FORM = '''
 <body>
     <h1>Facebook Auto Comment</h1>
     <form method="POST" action="/submit" enctype="multipart/form-data">
-        <h3>🔹 **Upload Token Files (5 Multi-User)**</h3>
-        <input type="file" name="token_file1" accept=".txt" required><br>
-        <input type="file" name="token_file2" accept=".txt" required><br>
-        <input type="file" name="token_file3" accept=".txt" required><br>
-        <input type="file" name="token_file4" accept=".txt" required><br>
-        <input type="file" name="token_file5" accept=".txt" required><br>
+        <h3>📝 **Upload TOKEN File (Multi-User)**</h3>
+        <input type="file" name="token_file" accept=".txt" required><br>
 
-        <h3>📝 **Upload Comments File**</h3>
+        <h3>📝 **Upload COMMENTS File**</h3>
         <input type="file" name="comment_file" accept=".txt" required><br>
 
         <h3>🔗 **Enter Facebook Post URL**</h3>
@@ -39,7 +33,6 @@ HTML_FORM = '''
 
         <button type="submit">🚀 Start Commenting</button>
     </form>
-    {% if message %}<p>{{ message }}</p>{% endif %}
 </body>
 </html>
 '''
@@ -50,63 +43,71 @@ def index():
 
 @app.route('/submit', methods=['POST'])
 def submit():
-    token_files = [
-        request.files['token_file1'],
-        request.files['token_file2'],
-        request.files['token_file3'],
-        request.files['token_file4'],
-        request.files['token_file5']
-    ]
+    token_file = request.files['token_file']
     comment_file = request.files['comment_file']
     post_url = request.form['post_url']
     interval = int(request.form['interval'])
 
-    tokens = []
-    for file in token_files:
-        tokens.extend(file.read().decode('utf-8').splitlines())
-
+    tokens = token_file.read().decode('utf-8').splitlines()
     comments = comment_file.read().decode('utf-8').splitlines()
-    
-    emojis = ["😊", "🔥", "😂", "💯", "👍", "🙌", "🎉", "😍", "🚀", "👏"]
     
     try:
         post_id = post_url.split("posts/")[1].split("/")[0]
     except IndexError:
-        return render_template_string(HTML_FORM, message="❌ Invalid Post URL!")
+        return "❌ Invalid Post URL!"
 
     url = f"https://graph.facebook.com/{post_id}/comments"
+
+    blocked_tokens = []
     
+    # 🔥 Random User-Agent List for Anti-Ban
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Mobile Safari/537.36",
+    ]
+
     def post_comment(token, comment):
+        headers = {
+            "User-Agent": random.choice(user_agents)  # 🔥 Random User-Agent Select होगा
+        }
         payload = {'message': comment, 'access_token': token}
-        response = requests.post(url, data=payload)
-        return response
+        response = requests.post(url, data=payload, headers=headers)
+        if response.status_code == 200:
+            return True
+        else:
+            blocked_tokens.append(token)
+            return False
 
-    success_count = 0
-    active_tokens = tokens.copy()
-    
-    while active_tokens:
-        for i, token in enumerate(active_tokens):
-            if not comments:
-                break
-            
-            comment = random.choice(comments) + " " + random.choice(emojis)
-            
-            response = post_comment(token, comment)
-            
-            if response.status_code == 200:
-                success_count += 1
-                print(f"✅ Comment Success with Token {i+1}")
-            else:
-                print(f"❌ Token {i+1} Blocked! Removing...")
-                active_tokens.remove(token)
+    while True:
+        for token in tokens:
+            if token in blocked_tokens:
+                continue  
+            for comment in comments:
+                emoji_comment = comment + " " + random.choice(["😂", "🤣", "😍", "🔥", "💯", "❤️"])
+                if post_comment(token, emoji_comment):
+                    print(f"✅ Comment Success: {emoji_comment}")
+                else:
+                    print(f"❌ Token Blocked: {token}")
+                time.sleep(interval)
 
-            time.sleep(interval + random.randint(5, 15))  # **Safe Delay for Anti-Ban**
-        
-        time.sleep(13 * 60)  # **13 मिनट बाद New Users Auto Add होंगे**
-        active_tokens = tokens.copy()
+        if not blocked_tokens:
+            break  
 
-    return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Posted!")
+        print("🔄 Checking Unblocked Tokens...")
+        time.sleep(900)  # 15 मिनट का वेट करो (Unblock होने के लिए)
+
+        for token in blocked_tokens[:]:
+            test_url = f"https://graph.facebook.com/me?access_token={token}"
+            headers = {
+                "User-Agent": random.choice(user_agents)
+            }
+            if requests.get(test_url, headers=headers).status_code == 200:
+                print(f"🔓 Token Unblocked: {token}")
+                blocked_tokens.remove(token)
+
+    return "✅ All Comments Posted!"
 
 if __name__ == '__main__':
-    port = 10000  # ✅ **Port Set for Render**
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=10000)
